@@ -1001,3 +1001,15 @@ POST <=== status=200 agent=Mozilla
 GET /?employee_name=Charlie&department=Legal status=200 agent=Mozilla
 POST ;=== status=200 agent=Mozilla
 POST ;=== status=200 agent=Mozilla
+GET /=== status=401 agent=Mozilla
+GET /=== status=200 agent=Mozilla
+GET /favicon.ico status=404 agent=Mozilla
+GET /=== status=401 agent=curl
+GET /=== status=200 agent=curl
+GET /=== status=200 agent=Mozilla
+GET /?query=<script>alert('xss')</script>=== status=200 agent=curl
+GET /?query=<script>alert('xss')</script>=== status=200 agent=curl
+GET ;=== status=200 agent=Mozilla
+GET <=== status=200 agent=Mozilla
+GET /=== status=200 agent=Mozilla
+GET <=== status=200 agent=Mozilla
