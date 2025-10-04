@@ -1,0 +1,86 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": null,
+  "added_tokens": [
+    {
+      "id": 0,
+      "content": "[UNK]",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 1,
+      "content": "[PAD]",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 2,
+      "content": "[MASK]",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    }
+  ],
+  "normalizer": null,
+  "pre_tokenizer": {
+    "type": "Whitespace"
+  },
+  "post_processor": null,
+  "decoder": null,
+  "model": {
+    "type": "WordLevel",
+    "vocab": {
+      "[UNK]": 0,
+      "[PAD]": 1,
+      "[MASK]": 2,
+      "=": 3,
+      "Mozilla": 4,
+      "agent": 5,
+      "status": 6,
+      "200": 7,
+      "POST": 8,
+      "GET": 9,
+      ";===": 10,
+      "<===": 11,
+      "&": 12,
+      "/?": 13,
+      "department": 14,
+      "employee_name": 15,
+      "==": 16,
+      "Marketing": 17,
+      "Legal": 18,
+      "Alice": 19,
+      "Engineering": 20,
+      "Eve": 21,
+      "Sales": 22,
+      "Frank": 23,
+      "David": 24,
+      "HR": 25,
+      "Bob": 26,
+      "Charlie": 27,
+      "(": 28,
+      "ZXuZٞ": 29,
+      "驖zvx": 30,
+      "===": 31,
+      "驖zvxKuZٞ": 32,
+      "/===": 33,
+      ".": 34,
+      "/": 35,
+      "401": 36,
+      "404": 37,
+      "favicon": 38,
+      "ico": 39
+    },
+    "unk_token": "[UNK]"
+  }
+}
