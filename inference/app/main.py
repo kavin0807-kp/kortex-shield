@@ -21,7 +21,7 @@ model = BertForMaskedLM(config)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
 model.to(device); model.eval()
 
-ANOMALY_THRESHOLD = 2.0
+ANOMALY_THRESHOLD = 4.5
 app = FastAPI()
 
 def decode_string(s):

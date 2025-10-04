@@ -1,116 +1,123 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
-    <!DOCTYPE html>
-    <html lang="en">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kortex Threat Visualizer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { margin:0; font-family:'Inter', sans-serif; background:#0f111a; color:#f0f0f0; }
+header { background:#1a1f2a; padding:1rem 2rem; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 5px rgba(0,0,0,0.5); }
+header h1 { font-size:1.5rem; color:#00d4ff; }
+main { display:flex; flex-wrap:wrap; padding:1rem; gap:1rem; }
+.panel { background:#1f2633; border-radius:10px; padding:1rem; flex:1 1 300px; min-height:300px; box-shadow:0 2px 10px rgba(0,0,0,0.5); }
+h2 { font-size:1.2rem; color:#00d4ff; margin-bottom:0.5rem; }
+#networkMap { width:100%; height:300px; background:#111; border-radius:10px; position:relative; overflow:hidden; }
+.node { position:absolute; width:10px; height:10px; border-radius:50%; background:#ff4c4c; transition: all 0.3s; }
+ul#alerts { list-style:none; padding:0; margin:0; max-height:250px; overflow-y:auto; }
+ul#alerts li { margin:0.3rem 0; padding:0.3rem; border-bottom:1px solid #333; }
+canvas { background:#111; border-radius:10px; }
+.filter { margin-bottom:0.5rem; display:flex; gap:0.5rem; }
+.filter input { flex:1; padding:0.3rem; border-radius:5px; border:none; }
+</style>
+</head>
+<body>
 
-    <head>
-        <meta charset="UTF-8">
-        <title>App3 - System Diagnostics</title>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+<header>
+  <h1>Kortex Threat Visualizer</h1>
+  <span id="liveTime"></span>
+</header>
 
-            body {
-                font-family: 'Roboto Mono', monospace;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                background-color: #1a1a1a;
-                color: #00ff7f;
-                margin: 0;
-            }
+<main>
+  <div class="panel">
+    <h2>Live Threat Map</h2>
+    <div id="networkMap"></div>
+  </div>
 
-            .terminal {
-                width: 700px;
-                height: 400px;
-                background: #0d0d0d;
-                border: 1px solid #00ff7f;
-                border-radius: 5px;
-                padding: 20px;
-                box-shadow: 0 0 15px rgba(0, 255, 127, 0.2);
-                display: flex;
-                flex-direction: column;
-            }
+  <div class="panel">
+    <h2>Live Alerts</h2>
+    <div class="filter">
+      <input type="text" id="ipFilter" placeholder="Filter by IP">
+    </div>
+    <ul id="alerts"></ul>
+  </div>
 
-            .header {
-                margin-bottom: 20px;
-            }
+  <div class="panel">
+    <h2>Threat Score Trend</h2>
+    <canvas id="scoreChart" height="300"></canvas>
+  </div>
+</main>
 
-            .header h1 {
-                font-size: 24px;
-                text-shadow: 0 0 5px #00ff7f;
-            }
+<script>
+// Live time
+function updateTime() {
+  document.getElementById('liveTime').textContent = new Date().toLocaleString();
+}
+setInterval(updateTime,1000);
 
-            .output {
-                flex-grow: 1;
-                overflow-y: auto;
-                margin-bottom: 20px;
-            }
+// Mock detection data generator (replace with real log parsing)
+const nodes=[];
+const alerts=[];
+function generateDetection() {
+  const ip = `192.168.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
+  const score = (Math.random()*5).toFixed(2);
+  const payloads = ['SQLi','XSS','RCE','LFI','Directory Scan'];
+  const payload = payloads[Math.floor(Math.random()*payloads.length)];
+  const detection = {timestamp:new Date().toISOString(),client_ip:ip,score:score,payload:payload};
+  alerts.push(detection);
+  if(alerts.length>50) alerts.shift();
+  return detection;
+}
 
-            .output p {
-                margin: 0 0 5px 0;
-            }
+// Network Map
+const mapDiv = document.getElementById('networkMap');
+function updateNetworkMap(detection){
+  const node=document.createElement('div');
+  node.className='node';
+  node.style.top=Math.random()*90+'%';
+  node.style.left=Math.random()*90+'%';
+  node.title=`IP: ${detection.client_ip}\nScore: ${detection.score}\nPayload: ${detection.payload}`;
+  mapDiv.appendChild(node);
+  setTimeout(()=>node.remove(),5000);
+}
 
-            .prompt {
-                display: flex;
-                align-items: center;
-            }
+// Live Alerts List
+const alertsList=document.getElementById('alerts');
+const ipFilter=document.getElementById('ipFilter');
+function renderAlerts(){
+  const filter=ipFilter.value.toLowerCase();
+  alertsList.innerHTML=alerts.filter(a=>a.client_ip.includes(filter)).map(a=>`<li>[${new Date(a.timestamp).toLocaleTimeString()}] ${a.client_ip} - Score: ${a.score} - ${a.payload}</li>`).join('');
+}
 
-            .prompt label {
-                margin-right: 10px;
-            }
+// Chart.js Trend
+const ctx=document.getElementById('scoreChart').getContext('2d');
+const scoreChart=new Chart(ctx,{
+  type:'line',
+  data:{labels:[], datasets:[{label:'Threat Score', data:[], borderColor:'#ff4c4c', tension:0.3, fill:false}]},
+  options:{scales:{y:{beginAtZero:true, max:5}}, animation:false}
+});
 
-            .prompt-input {
-                flex-grow: 1;
-                background: transparent;
-                border: none;
-                color: #00ff7f;
-                font-size: 16px;
-                outline: none;
-            }
+function updateChart(detection){
+  scoreChart.data.labels.push(new Date(detection.timestamp).toLocaleTimeString());
+  scoreChart.data.datasets[0].data.push(detection.score);
+  if(scoreChart.data.labels.length>20){
+    scoreChart.data.labels.shift();
+    scoreChart.data.datasets[0].data.shift();
+  }
+  scoreChart.update();
+}
 
-            .run-btn {
-                background: #00ff7f;
-                color: #0d0d0d;
-                border: none;
-                padding: 10px 15px;
-                font-family: inherit;
-                cursor: pointer;
-                margin-left: 15px;
-            }
-        </style>
-    </head>
+// Polling every 1.5s
+setInterval(()=>{
+  const detection=generateDetection();
+  updateNetworkMap(detection);
+  renderAlerts();
+  updateChart(detection);
+},1500);
 
-    <body>
-        <div class="terminal">
-            <div class="header">
-                <h1>KORTEX DIAGNOSTICS v1.0</h1>
-            </div>
-            <div class="output" id="output">
-                <p>> Ready for input...</p>
-            </div>
-            <form id="commandForm" action="/?app=app3" method="POST">
-                <div class="prompt">
-                    <label for="command">CMD:</label>
-                    <input type="text" id="command" name="command" class="prompt-input" autocomplete="off" autofocus>
-                    <button type="submit" class="run-btn">EXECUTE</button>
-                </div>
-            </form>
-        </div>
-        <script>
-            const form = document.getElementById('commandForm'), input = document.getElementById('command'), output = document.getElementById('output');
-            form.addEventListener('submit', function (e) {
-                e.preventDefault(); const cmd = input.value; if (!cmd) return;
-                const p = document.createElement('p'); p.innerHTML = `> Executing: <strong>${cmd}</strong>`;
-                output.appendChild(p); input.value = '';
-                const responses = ["Checking network...", "Pinging target...", "Packet sent.", "Packet received.", "Status: OK.", "Done."];
-                let i = 0; const interval = setInterval(() => {
-                    if (i < responses.length) {
-                        const resp = document.createElement('p'); resp.textContent = `  ${responses[i]}`;
-                        output.appendChild(resp); output.scrollTop = output.scrollHeight; i++;
-                    } else { clearInterval(interval); }
-                }, 300);
-            });
-        </script>
-    </body>
+ipFilter.addEventListener('input',renderAlerts);
 
-    </html>
+</script>
+</body>
+</html>
