@@ -1,53 +1,18 @@
-#!/usr/bin/env python3
-"""
-Parse nginx access.log into CSV lines with structured features for training.
-"""
-import re
-import csv
-from datetime import datetime
-from pathlib import Path
-
-LOG = Path("../nginx/logs/access.log")
-OUT = Path("../data/parsed_requests.csv")
-
-# Regex for combined log format
-LOG_RE = re.compile(r'(?P<ip>\S+) \S+ \S+ \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+)(?: \S+)?" (?P<status>\d{3}) (?P<size>\S+) "(?P<ref>[^"]*)" "(?P<ua>[^"]*)"')
-
+import re, json, os
+LOG_PATH = "nginx/logs/access.log"
+OUTPUT_PATH = "data_pipeline/parsed_data/parsed_logs.json"
+LOG_PATTERN = re.compile(r'(?P<ip>[\d\.]+) - (?P<user>[^ ]+) \[(?P<time>[^\]]+)\] "(?P<request_line>[^"]+)" (?P<status>\d{3}) (?P<size>\d+) "(?P<referer>[^"]*)" "(?P<agent>[^"]*)"')
 def parse_line(line):
-    m = LOG_RE.match(line)
-    if not m:
-        return None
-    gd = m.groupdict()
-    # convert time
-    try:
-        ts = datetime.strptime(gd["time"].split()[0], "%d/%b/%Y:%H:%M:%S")
-    except Exception:
-        ts = None
-    return {
-        "ip": gd["ip"],
-        "time": ts.isoformat() if ts else "",
-        "method": gd["method"],
-        "path": gd["path"],
-        "status": gd["status"],
-        "size": gd["size"],
-        "referrer": gd["ref"],
-        "user_agent": gd["ua"],
-    }
-
-def main():
-    if not LOG.exists():
-        print("Log file not found:", LOG)
-        return
-
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    with LOG.open() as lf, OUT.open("w", newline='') as outf:
-        writer = csv.DictWriter(outf, fieldnames=["ip","time","method","path","status","size","referrer","user_agent"])
-        writer.writeheader()
-        for line in lf:
-            parsed = parse_line(line.strip())
-            if parsed:
-                writer.writerow(parsed)
-    print("Wrote parsed CSV to", OUT)
-
-if __name__ == "__main__":
-    main()
+    match = LOG_PATTERN.match(line)
+    if not match: return None
+    data = match.groupdict()
+    try: parts = data['request_line'].split(); data['method'] = parts[0]; data['path'] = parts[1]
+    except (ValueError, IndexError): data['method'], data['path'] = "INVALID", "INVALID"
+    return data
+def parse_logs():
+    if not os.path.exists(LOG_PATH) or os.path.getsize(LOG_PATH) == 0: print("[!] Log file missing or empty. Please run the crawler first."); return
+    records = [p for l in open(LOG_PATH, "r") if (p := parse_line(l))]
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    with open(OUTPUT_PATH, "w") as f: json.dump(records, f, indent=2)
+    print(f"[+] Parsed {len(records)} log entries -> {OUTPUT_PATH}")
+if __name__ == "__main__": parse_logs()
