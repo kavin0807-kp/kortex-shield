@@ -1,0 +1,9 @@
+torch
+transformers
+tokenizers
+accelerate>=0.26.0
+numpy<2.0
+requests
+datasets
+evaluate
+scikit-learn
