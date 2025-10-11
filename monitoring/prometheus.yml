@@ -1,11 +1,12 @@
 global:
   scrape_interval: 15s
-  evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'kortex-shield'
+  - job_name: 'kortex_inference'
     static_configs:
-      - targets: ['kortex-shield:8000'] # Assuming the API will expose a /metrics endpoint
-  - job_name: 'prometheus'
+      - targets: ['inference:9000']
+    metrics_path: /metrics
+
+  - job_name: 'nginx'
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['nginx:9113']  # if you run an nginx exporter; otherwise omit
