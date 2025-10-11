@@ -1,49 +1,36 @@
-#!/usr/bin/env python3
-"""
-A simple benign traffic generator to exercise the apps.
-Use responsibly; this is for generating diverse but harmless requests.
-"""
-import requests
-import random
-import time
-from urllib.parse import urljoin
-
-BASE = "http://localhost:80/"  # nginx entry
-
-paths = [
-    "wars/app1/index.jsp",
-    "wars/app1/vulnerable-sqli.jsp?uid=1",
-    "wars/app2/index.jsp",
-    "wars/app2/reflected-xss.jsp?msg=hello",
-    "wars/app3/index.jsp",
-]
-
-user_agents = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    "curl/7.68.0",
-    "Mozilla/5.0 (Linux; Android 10)",
-]
-
-def random_query_variants():
-    return [
-        "?uid=1",
-        "?uid=2",
-        "?uid=10",
-        "?msg=hi+there",
-    ]
-
-def run(iterations=200, delay=(0.05, 0.3)):
-    s = requests.Session()
-    for i in range(iterations):
-        p = random.choice(paths)
-        url = urljoin(BASE, p) + (random.choice(random_query_variants()) if random.random() < 0.2 else "")
-        headers = {"User-Agent": random.choice(user_agents)}
+import requests, time, random, getpass
+BASE_URL = "http://localhost:8080"
+try:
+    #AUTH=None # Auth is disabled in nginx.conf for easier testing
+    # If you re-enable it, uncomment these lines.
+    username = input(f"Enter username for {BASE_URL}: "); 
+    password = getpass.getpass("Enter password: ");
+    AUTH = (username, password)
+except Exception as e: print(f"Could not read credentials. Error: {e}"); exit(1)
+EMPLOYEE_NAMES=["Alice", "Bob", "Charlie", "David", "Eve"]; DEPARTMENTS=["Engineering", "Marketing", "Sales", "HR"]
+REVIEWS=["Great product!", "Could be better.", "Amazing!"]; COMMANDS=["ping google.com", "traceroute 8.8.8.8"]
+USER_AGENTS=["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"]
+def generate_traffic():
+    while True:
         try:
-            r = s.get(url, headers=headers, timeout=5)
-            print(f"[{i}] {r.status_code} {url}")
-        except Exception as e:
-            print("request error:", e)
-        time.sleep(random.uniform(*delay))
-
-if __name__ == "__main__":
-    run()
+            app_choice = random.choice(['app1', 'app2', 'app3', 'refresh'])
+            headers = {"User-Agent": random.choice(USER_AGENTS)}
+            if app_choice == 'app1':
+                params = { 'employee_name': random.choice(EMPLOYEE_NAMES), 'department': random.choice(DEPARTMENTS) }
+                r = requests.get(BASE_URL, params=params, headers=headers, auth=AUTH, timeout=5)
+                print(f"App1 (GET): {r.url} -> {r.status_code}")
+            elif app_choice == 'app2':
+                data = { 'review_text': random.choice(REVIEWS), 'rating': random.randint(3, 5) }
+                r = requests.post(f"{BASE_URL}/?app=app2", data=data, headers=headers, auth=AUTH, timeout=5)
+                print(f"App2 (POST): {r.url} -> {r.status_code}")
+            elif app_choice == 'app3':
+                data = {'command': random.choice(COMMANDS)}
+                r = requests.post(f"{BASE_URL}/?app=app3", data=data, headers=headers, auth=AUTH, timeout=5)
+                print(f"App3 (POST): {r.url} -> {r.status_code}")
+            elif app_choice == 'refresh':
+                r = requests.get(BASE_URL, headers=headers, auth=AUTH, timeout=5)
+                print(f"Refresh (GET): {r.url} -> {r.status_code}")
+            if r.status_code == 401: print("[!] Authentication failed."); break
+        except requests.exceptions.RequestException as e: print(f"ERROR: Could not connect to {BASE_URL}. Is it running?"); break
+        time.sleep(random.uniform(1, 3))
+if __name__ == "__main__": print(f"[+] Starting traffic generation on {BASE_URL}..."); print("Press Ctrl+C to stop."); generate_traffic()
