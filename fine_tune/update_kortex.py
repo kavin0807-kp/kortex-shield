@@ -1,35 +1,55 @@
-import os
+#!/usr/bin/env python3
+"""
+Fine-tune loop: loads latest checkpoint and trains on new labeled examples.
+Designed for safe continuous learning pipeline.
+"""
 import torch
-from training.train import LogsDataset
-from transformers import (
-    BertConfig, BertForMaskedLM, PreTrainedTokenizerFast,
-    DataCollatorForLanguageModeling, Trainer, TrainingArguments
-)
-from data_pipeline.parse_logs import parse_line
-from data_pipeline.normalize import normalize
+from pathlib import Path
+from training.train import load_training_data, SimpleDataset, collate_batch
+from tokenizers import Tokenizer
+from torch.utils.data import DataLoader
 
-ACCESS_LOG = "nginx/logs/access.log"
-TOKENIZER_PATH = "kortex_model/tokenizer.json"
-MODEL_PATH = "kortex_model/kortex_model.bin"
-UPDATED_MODEL_PATH = "kortex_model/kortex_model.bin"
+CKPT = Path("../kortex_model/kortex_model.pt")
+TOKENIZER_PATH = Path("../kortex_model/tokenizer.json")
 
-new_data = [normalize(parsed) for line in open(ACCESS_LOG,"r") if (parsed:=parse_line(line)) and parsed.get("status")=="200"]
-if not new_data: print("[!] No new benign logs found to fine-tune on."); exit()
+def incremental_train(epochs=1, lr=1e-5):
+    if not CKPT.exists():
+        print("No checkpoint found at", CKPT)
+        return
+    ckpt = torch.load(CKPT, map_location="cpu")
+    model_name = ckpt.get("model_name")
+    state = ckpt.get("state_dict")
+    from transformers import AutoConfig, AutoModelForSequenceClassification, AdamW
+    config = AutoConfig.from_pretrained(model_name, num_labels=2)
+    model = AutoModelForSequenceClassification.from_config(config)
+    model.load_state_dict(state)
+    tokenizer = Tokenizer.from_file(str(TOKENIZER_PATH)) if TOKENIZER_PATH.exists() else None
 
-tokenizer = PreTrainedTokenizerFast(tokenizer_file=TOKENIZER_PATH)
-if tokenizer.pad_token is None: tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+    samples, labels = load_training_data()
+    ds = SimpleDataset(samples, labels, tokenizer)
+    dl = DataLoader(ds, batch_size=8, shuffle=True, collate_fn=collate_batch)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    opt = AdamW(model.parameters(), lr=lr)
 
-config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=256, num_hidden_layers=4, num_attention_heads=4, intermediate_size=512, max_position_embeddings=128)
-model = BertForMaskedLM(config)
-model.load_state_dict(torch.load(MODEL_PATH)); model.train()
+    model.train()
+    for epoch in range(epochs):
+        for X, y in dl:
+            X = X.to(device)
+            y = y.to(device)
+            opt.zero_grad()
+            out = model(X, labels=y)
+            loss = out.loss
+            loss.backward()
+            opt.step()
+        print("Epoch done")
 
-dataset = LogsDataset.__new__(LogsDataset)
-dataset.lines = new_data; dataset.tokenizer = tokenizer; dataset.max_length = 128
-data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+    # save updated checkpoint
+    torch.save({
+        "model_name": model_name,
+        "state_dict": model.state_dict(),
+    }, CKPT)
+    print("Saved updated checkpoint to", CKPT)
 
-training_args = TrainingArguments(output_dir="./finetune_results", overwrite_output_dir=True, num_train_epochs=2, per_device_train_batch_size=16, save_steps=5000, save_total_limit=1, logging_steps=50, report_to="none", fp16=torch.cuda.is_available())
-trainer = Trainer(model=model, args=training_args, data_collator=data_collator, train_dataset=dataset)
-
-print(f"[+] Fine-tuning on {len(new_data)} new benign requests..."); trainer.train()
-torch.save(model.state_dict(), UPDATED_MODEL_PATH)
-print(f"✅ Updated model saved -> {UPDATED_MODEL_PATH}")
+if __name__ == "__main__":
+    incremental_train()
