@@ -1,12 +1,9 @@
 global:
   scrape_interval: 15s
-
 scrape_configs:
-  - job_name: 'kortex_inference'
+  - job_name: 'prometheus'
     static_configs:
-      - targets: ['inference:9000']
-    metrics_path: /metrics
-
-  - job_name: 'nginx'
+      - targets: ['localhost:9090']
+  - job_name: 'kortex-shield'
     static_configs:
-      - targets: ['nginx:9113']  # if you run an nginx exporter; otherwise omit
+      - targets: ['kortex-shield:8000']
