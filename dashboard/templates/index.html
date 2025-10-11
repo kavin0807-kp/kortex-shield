@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="10">
+    <title>Kortex Shield - Detections</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Roboto+Mono&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #1e2022;
+            color: #f0f0f0;
+            margin: 0;
+            padding: 2em;
+        }
+
+        h1 {
+            color: #00ff7f;
+            text-shadow: 0 0 5px rgba(0, 255, 127, 0.5);
+            border-bottom: 1px solid #00ff7f;
+            padding-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+
+        th {
+            background-color: #2a2c2e;
+        }
+
+        tr:nth-child(even) {
+            background-color: #252729;
+        }
+
+        code {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #333;
+            padding: 2px 5px;
+            border-radius: 3px;
+            color: #ff6347;
+            word-break: break-all;
+        }
+
+        .score {
+            font-weight: bold;
+        }
+
+        .score-high {
+            color: #ff4757;
+        }
+
+        .score-medium {
+            color: #ffa502;
+        }
+
+        .no-detections {
+            text-align: center;
+            font-size: 1.2em;
+            color: #777;
+            padding: 50px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🚨 Kortex Shield - Live Anomaly Detections</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Client IP</th>
+                <th>Anomaly Score</th>
+                <th>Detected Payload</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if detections %}
+            {% for detection in detections %}
+            <tr>
+                <td>{{ detection.timestamp }}</td>
+                <td><code>{{ detection.client_ip }}</code></td>
+                <td class="score">
+                    {% set score = detection.score|float %}
+                    {% if score > 3.0 %}
+                    <span class="score-high">{{ "%.4f"|format(score) }}</span>
+                    {% elif score > 1.5 %}
+                    <span class="score-medium">{{ "%.4f"|format(score) }}</span>
+                    {% else %}
+                    <span>{{ "%.4f"|format(score) }}</span>
+                    {% endif %}
+                </td>
+                <td><code>{{ detection.payload }}</code></td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+                <td colspan="4" class="no-detections">No anomalies detected yet. System is clean.</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</body>
+
+</html>

@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'kortex-shield'
+    static_configs:
+      - targets: ['kortex-shield:8000'] # Assuming the API will expose a /metrics endpoint
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
