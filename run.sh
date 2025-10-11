@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 set -e
-
-# --- Color Definitions & Helper ---
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; BLUE='\033[0;34m'; RESET='\033[0m'
 print_header() { echo ""; echo -e "${CYAN}┠─[ PHASE ${1}: ${2} ]${RESET}"; sleep 0.5; }
-
-# --- Main Script ---
 clear; echo -e "${CYAN}"; cat << "EOF"
     _  __         __          ___________     .__.__    ___________.__
    / |/ |_______|  | __ ____ \_   _____/____ |__|  |   \__    ___/|  |__
@@ -26,21 +22,21 @@ echo -e "${YELLOW}┃  Action Required: Please open a NEW terminal window.${RESE
 echo -e "${YELLOW}┃  In that new terminal, navigate to this project folder and run:${RESET}"
 echo -e "${GREEN}┃  python3 benign_crawler/benign_crawler.py${RESET}"
 echo -e "${YELLOW}┃  Let it run for 5-10 minutes, then press Ctrl+C in that new window to stop it.${RESET}"; echo ""
-read -p "Once you have stopped the crawler in the other terminal, press [Enter] here to continue..."
+read -p "Once you have stopped the crawler, press [Enter] here to continue..."
 
 print_header 3 "COGNITIVE MATRIX CONSTRUCTION"
 echo -e "${YELLOW}┃  Parsing raw log data...${RESET}"; python3 data_pipeline/parse_logs.py
-echo -e "${YELLOW}┃  Normalizing and decoding request patterns...${RESET}"; python3 data_pipeline/normalize.py
+echo -e "${YELLOW}┃  Normalizing with feature engineering...${RESET}"; python3 data_pipeline/normalize.py
 echo -e "${YELLOW}┃  Generating neural vocabulary (tokenizer)...${RESET}"; python3 data_pipeline/create_tokenizer.py
-echo -e "${YELLOW}┃  Executing deep learning sequence (training model)...${RESET}"; echo -e "${YELLOW}┃  This may take several minutes. Please wait.${RESET}"; python3 training/train.py
+echo -e "${YELLOW}┃  Executing supervised learning sequence (training model)...${RESET}"; echo -e "${YELLOW}┃  This may take several minutes.${RESET}"; python3 training/train.py
 
-print_header 4 "SHIELD ACTIVATION"; echo -e "${YELLOW}┃  Loading the newly trained cognitive matrix into the shield...${RESET}"
+print_header 4 "SHIELD ACTIVATION"; echo -e "${YELLOW}┃  Loading the intelligent matrix into the shield...${RESET}"
 docker compose restart kortex-shield; echo -e "${GREEN}┃  ✔ Shield is active.${RESET}"
 
 echo ""; echo -e "${BLUE}=======================================================================${RESET}"
 echo -e "${GREEN}                     MISSION COMPLETE                              ${RESET}"
 echo -e "${BLUE}=======================================================================${RESET}"
-echo -e "${CYAN}The Kortex Shield is now live, armed, and actively monitoring traffic.${RESET}"; echo ""
-echo -e "${CYAN}To monitor for threats in real-time, view the live dashboard at:${RESET}"
+echo -e "${CYAN}Kortex Shield is live and using the supervised model.${RESET}"; echo ""
+echo -e "${CYAN}To monitor detections, view the live dashboard at:${RESET}"
 echo -e "${GREEN}http://localhost:5001 (or Port 5001 in your cloud environment's Web Preview)${RESET}"; echo ""
 echo -e "${BLUE}=======================================================================${RESET}"
