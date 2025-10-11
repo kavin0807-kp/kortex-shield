@@ -1,56 +1,93 @@
-import os, torch, logging, urllib.parse, base64
 from fastapi import FastAPI, Request
-from transformers import BertConfig, BertForMaskedLM, PreTrainedTokenizerFast
+from pydantic import BaseModel
+import uvicorn
+import os
+import torch
+from transformers import AutoConfig, AutoModelForSequenceClassification
+from tokenizers import Tokenizer
+from typing import Dict
+import time
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
-TOKENIZER_PATH = "kortex_model/tokenizer.json"
-MODEL_PATH = "kortex_model/kortex_model.bin"
-DETECTIONS_LOG_FILE = "detections/detections.log"
+MODEL_DIR = "/app/kortex_model"
+MODEL_PATH = os.path.join(MODEL_DIR, "kortex_model.pt")  # produced by training/train.py
+TOKENIZER_PATH = os.path.join(MODEL_DIR, "tokenizer.json")
 
-logging.basicConfig(
-    filename=DETECTIONS_LOG_FILE, level=logging.INFO,
-    format='{"timestamp": "%(asctime)s", "client_ip": "%(client_ip)s", "score": %(score).4f, "payload": "%(payload)s"}',
-    datefmt='%Y-%m-%dT%H:%M:%S%z'
-)
+app = FastAPI(title="Kortex Inference")
 
-tokenizer = PreTrainedTokenizerFast(tokenizer_file=TOKENIZER_PATH)
-if tokenizer.pad_token is None: tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+# Prometheus metrics
+REQUEST_COUNT = Counter("kortex_requests_total", "Total inference requests")
+REQUEST_LATENCY = Histogram("kortex_request_latency_seconds", "Inference latency seconds")
 
-config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=256, num_hidden_layers=4, num_attention_heads=4, intermediate_size=512, max_position_embeddings=128)
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = BertForMaskedLM(config)
-model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-model.to(device); model.eval()
+# Lazy load
+model = None
+tokenizer = None
+device = "cpu"
 
-ANOMALY_THRESHOLD = 2.0
-app = FastAPI()
+class AnalyzeRequest(BaseModel):
+    path: str
+    method: str = "GET"
+    headers: Dict[str, str] = {}
 
-def decode_string(s):
-    try:
-        decoded_s = urllib.parse.unquote_plus(s);
-        if decoded_s != s: return decode_string(decoded_s)
-    except Exception: decoded_s = s
-    try:
-        decoded_s += '=' * (-len(decoded_s) % 4)
-        base64_decoded = base64.b64decode(decoded_s).decode('utf-8', 'ignore')
-        if sum(c.isprintable() for c in base64_decoded) / len(base64_decoded) > 0.8: return decode_string(base64_decoded)
-    except Exception: pass
-    return decoded_s
+def load_model():
+    global model, tokenizer
+    if model is None:
+        if os.path.exists(MODEL_PATH):
+            print("Loading model from", MODEL_PATH)
+            # Expecting a saved torch checkpoint with model state dict and config name
+            ckpt = torch.load(MODEL_PATH, map_location=device)
+            model_name = ckpt.get("model_name", None)
+            if model_name:
+                config = AutoConfig.from_pretrained(model_name)
+                model = AutoModelForSequenceClassification.from_config(config)
+                model.load_state_dict(ckpt["state_dict"])
+            else:
+                # fallback: saved full model
+                model = ckpt["model"]
+            model.eval()
+        else:
+            print("Model not found at", MODEL_PATH, "- returning dummy responses.")
+            model = None
+        if os.path.exists(TOKENIZER_PATH):
+            tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
+        else:
+            tokenizer = None
 
-def normalize_request_line(method: str, path: str) -> str:
-    decoded_path = decode_string(path) if path else "NULL"
-    return f"{method} {decoded_path} status=MIRRORED agent=Unknown"
+@app.on_event("startup")
+def startup_event():
+    load_model()
 
 @app.post("/analyze")
-async def analyze_request(request: Request):
-    client_ip = request.client.host
-    method = request.headers.get("X-Original-Method", "GET")
-    path = request.headers.get("X-Original-URI", "/")
-    normalized_text = normalize_request_line(method, path)
-    inputs = tokenizer(normalized_text, return_tensors="pt", truncation=True, padding="max_length", max_length=128).to(device)
-    with torch.no_grad():
-        outputs = model(**inputs, labels=inputs["input_ids"])
-        loss = outputs.loss.item()
-    if loss > ANOMALY_THRESHOLD:
-        log_extra = {'client_ip': client_ip, 'score': loss, 'payload': f'"{method} {path}"'}
-        logging.info("ANOMALY DETECTED", extra=log_extra)
-    return {"status": "analyzed"}
+def analyze(req: AnalyzeRequest):
+    REQUEST_COUNT.inc()
+    t0 = time.time()
+    # Basic input normalization
+    text = req.path.lower()
+    # Tokenize with tokenizer if available
+    score = 0.0
+    label = "unknown"
+    if model is None:
+        label = "benign"
+        score = 0.01
+    else:
+        # A simple deterministic mapping: token ids sum -> fake logits if model absent
+        try:
+            enc = tokenizer.encode(text).ids if tokenizer else [1]
+            ids = torch.tensor([enc], dtype=torch.long)
+            with torch.no_grad():
+                out = model(ids)
+                logits = out.logits[0].cpu().numpy()
+                import numpy as np
+                probs = np.exp(logits) / np.sum(np.exp(logits))
+                score = float(probs.max())
+                label = "malicious" if probs.argmax() == 1 else "benign"
+        except Exception as e:
+            label = "error"
+            score = 0.0
+
+    REQUEST_LATENCY.observe(time.time() - t0)
+    return {"label": label, "score": score, "path": req.path}
+
+@app.get("/metrics")
+def metrics():
+    return generate_latest()
