@@ -1,40 +1,33 @@
-import json
-import os
-import urllib.parse
-import base64
+#!/usr/bin/env python3
+"""
+Normalize request path and parameters for tokenization.
+- Lowercase
+- Remove long numeric IDs
+- Collapse query param names/values to tokens
+"""
+import re
+from urllib.parse import urlparse, parse_qs
 
-INPUT_PATH = "data_pipeline/parsed_data/parsed_logs.json"
-OUTPUT_PATH = "data_pipeline/parsed_data/normalized_logs.txt"
+NUM_RE = re.compile(r'\b\d{4,}\b')
 
-def decode_string(s):
-    try:
-        decoded_s = urllib.parse.unquote_plus(s)
-        if decoded_s != s: return decode_string(decoded_s)
-    except Exception: decoded_s = s
-    try:
-        decoded_s += '=' * (-len(decoded_s) % 4)
-        base64_decoded = base64.b64decode(decoded_s).decode('utf-8', 'ignore')
-        if sum(c.isprintable() for c in base64_decoded) / len(base64_decoded) > 0.8:
-            return decode_string(base64_decoded)
-    except Exception: pass
-    return decoded_s
-
-def normalize(entry):
-    method = entry.get("method", "NULL")
-    path = entry.get("path", "NULL")
-    status = entry.get("status", "NULL")
-    agent = entry.get("agent", "NULL").split("/")[0] if entry.get("agent") else "NULL"
-    decoded_path = decode_string(path) if path else "NULL"
-    return f"{method} {decoded_path} status={status} agent={agent}"
-
-def normalize_logs():
-    if not os.path.exists(INPUT_PATH):
-        print(f"[!] Parsed log file not found at {INPUT_PATH}. Please run parse_logs.py first.")
-        return
-    with open(INPUT_PATH, "r") as f: records = json.load(f)
-    with open(OUTPUT_PATH, "w") as out:
-        for entry in records: out.write(normalize(entry) + "\n")
-    print(f"[+] Normalized and decoded {len(records)} logs -> {OUTPUT_PATH}")
+def normalize_path(path: str) -> str:
+    if not path:
+        return ""
+    u = urlparse(path)
+    p = u.path.lower()
+    p = NUM_RE.sub('<NUM>', p)
+    q = parse_qs(u.query)
+    qparts = []
+    for k, vals in q.items():
+        qparts.append(f"{k}=<VAL>")
+    normalized = p + ("?" + "&".join(qparts) if qparts else "")
+    return normalized
 
 if __name__ == "__main__":
-    normalize_logs()
+    # quick demo
+    examples = [
+        "/user/123456/profile?tab=2",
+        "/search?q=hello&id=987654321",
+    ]
+    for e in examples:
+        print(e, "->", normalize_path(e))
