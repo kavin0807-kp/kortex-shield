@@ -1,97 +1,48 @@
----
-## 📁 Kortex Shield - Root Directory
-
-### 📄 docker-compose.yml
-```yaml
 services:
   nginx:
-    image: nginx:1.25
-    container_name: nginx
+    image: nginx:stable
     ports:
-      - "8080:80"
+      - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/auth:/etc/nginx/auth:ro
       - ./nginx/logs:/var/log/nginx
-    networks:
-      - kortex-net
+      - ./nginx/auth:/etc/nginx/auth:ro
+      - ./wars:/usr/share/nginx/html/wars:ro
+    depends_on:
+      - tomcat
+    restart: unless-stopped
+
+  tomcat:
+    image: tomcat:9-jre11
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./wars:/usr/local/tomcat/webapps:rw
+    environment:
+      - JAVA_OPTS=-Xms512m -Xmx1g
+    restart: unless-stopped
+
+  inference:
+    build: ./inference
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./kortex_model:/app/kortex_model
     restart: unless-stopped
     depends_on:
-      - tomcat-app1
-      - tomcat-app2
-      - tomcat-app3
-      - kortex-shield
-
-  tomcat-app1:
-    image: tomcat:9.0-jdk11-temurin
-    container_name: tomcat-app1
-    volumes:
-      - ./wars/app1:/usr/local/tomcat/webapps/ROOT
-    networks:
-      - kortex-net
-    restart: unless-stopped
-
-  tomcat-app2:
-    image: tomcat:9.0-jdk11-temurin
-    container_name: tomcat-app2
-    volumes:
-      - ./wars/app2:/usr/local/tomcat/webapps/ROOT
-    networks:
-      - kortex-net
-    restart: unless-stopped
-
-  tomcat-app3:
-    image: tomcat:9.0-jdk11-temurin
-    container_name: tomcat-app3
-    volumes:
-      - ./wars/app3:/usr/local/tomcat/webapps/ROOT
-    networks:
-      - kortex-net
-    restart: unless-stopped
-
-  kortex-shield:
-    build: ./inference
-    container_name: kortex-shield
-    volumes:
-      - ./kortex_model:/app/kortex_model:ro
-      - ./detections:/app/detections
-    networks:
-      - kortex-net
-    restart: unless-stopped
-
-  dashboard:
-    build: ./dashboard
-    container_name: dashboard
-    ports:
-      - "5001:5001"
-    volumes:
-      - ./detections:/detections:ro
-    networks:
-      - kortex-net
-    restart: unless-stopped
+      - nginx
 
   prometheus:
-    image: prom/prometheus:v2.47.0
-    container_name: prometheus
-    ports:
-      - "9090:9090"
+    image: prom/prometheus:latest
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    networks:
-      - kortex-net
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:10.1.1
-    container_name: grafana
     ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    networks:
-      - kortex-net
+      - "9090:9090"
     restart: unless-stopped
 
-networks:
-  kortex-net:
-    driver: bridge
+  # optional: grafana (comment in if you want a dashboard)
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
