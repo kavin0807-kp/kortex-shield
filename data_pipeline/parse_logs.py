@@ -1,39 +1,53 @@
+#!/usr/bin/env python3
+"""
+Parse nginx access.log into CSV lines with structured features for training.
+"""
 import re
-import json
-import os
+import csv
+from datetime import datetime
+from pathlib import Path
 
-LOG_PATH = "nginx/logs/access.log"
-OUTPUT_DIR = "data_pipeline/parsed_data"
-OUTPUT_PATH = os.path.join(OUTPUT_DIR, "parsed_logs.json")
+LOG = Path("../nginx/logs/access.log")
+OUT = Path("../data/parsed_requests.csv")
 
-LOG_PATTERN = re.compile(
-    r'(?P<ip>[\d\.]+) - (?P<user>[^ ]+) \[(?P<time>[^\]]+)\] '
-    r'"(?P<request_line>[^"]+)" '
-    r'(?P<status>\d{3}) (?P<size>\d+) '
-    r'"(?P<referer>[^"]*)" "(?P<agent>[^"]*)"'
-)
+# Regex for combined log format
+LOG_RE = re.compile(r'(?P<ip>\S+) \S+ \S+ \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+)(?: \S+)?" (?P<status>\d{3}) (?P<size>\S+) "(?P<ref>[^"]*)" "(?P<ua>[^"]*)"')
 
 def parse_line(line):
-    match = LOG_PATTERN.match(line)
-    if not match: return None
-    data = match.groupdict()
+    m = LOG_RE.match(line)
+    if not m:
+        return None
+    gd = m.groupdict()
+    # convert time
     try:
-        parts = data['request_line'].split()
-        data['method'] = parts[0]
-        data['path'] = parts[1]
-    except (ValueError, IndexError):
-        data['method'], data['path'] = "INVALID", "INVALID"
-    return data
+        ts = datetime.strptime(gd["time"].split()[0], "%d/%b/%Y:%H:%M:%S")
+    except Exception:
+        ts = None
+    return {
+        "ip": gd["ip"],
+        "time": ts.isoformat() if ts else "",
+        "method": gd["method"],
+        "path": gd["path"],
+        "status": gd["status"],
+        "size": gd["size"],
+        "referrer": gd["ref"],
+        "user_agent": gd["ua"],
+    }
 
-def parse_logs():
-    if not os.path.exists(LOG_PATH) or os.path.getsize(LOG_PATH) == 0:
-        print(f"[!] Log file is missing or empty at {LOG_PATH}. Please generate traffic first.")
+def main():
+    if not LOG.exists():
+        print("Log file not found:", LOG)
         return
-    records = [parsed for line in open(LOG_PATH, "r") if (parsed := parse_line(line))]
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    with open(OUTPUT_PATH, "w") as out:
-        json.dump(records, out, indent=2)
-    print(f"[+] Parsed {len(records)} log entries -> {OUTPUT_PATH}")
+
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    with LOG.open() as lf, OUT.open("w", newline='') as outf:
+        writer = csv.DictWriter(outf, fieldnames=["ip","time","method","path","status","size","referrer","user_agent"])
+        writer.writeheader()
+        for line in lf:
+            parsed = parse_line(line.strip())
+            if parsed:
+                writer.writerow(parsed)
+    print("Wrote parsed CSV to", OUT)
 
 if __name__ == "__main__":
-    parse_logs()
+    main()
